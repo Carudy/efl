@@ -1,0 +1,1 @@
+python main.py --dataset cifar --iid --num_channels 1 --epochs 10
