@@ -1,1 +1,1 @@
-python main.py --dataset cifar --iid --num_channels 1 --epochs 10
+python main.py --dataset cifar --iid --num_channels 3 --gpu 0 --epochs 10

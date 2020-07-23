@@ -48,12 +48,14 @@ def load_data(data_name, iid, num_users):
 
 if __name__ == '__main__':
     args = args_parser()
+    print(args.gpu, torch.cuda.is_available())
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
     data_train, data_test, dict_users = load_data(args.dataset, args.iid, args.num_users)
     clients = [FL_client(args) for _ in range(args.num_users)]
     for i, client in enumerate(clients): client.set_data(data_train, dict_users[i])
 
+    print("Clients Generated.")
     # build model
     if args.dataset == 'cifar':
         net_main = CNNCifar(args=args).to(args.device)
@@ -71,7 +73,7 @@ if __name__ == '__main__':
     leaders = np.random.choice(range(args.num_users), 3, replace=False)
     for i in leaders: clients[i].is_leader = True
 
-
+    print("Start Learning:")
     # federated learning
     m = max(int(args.frac * args.num_users), 1)
     for epoch in range(args.epochs):
@@ -101,46 +103,3 @@ if __name__ == '__main__':
         # if iter in [9, 29, 49, 74, 99]:
         #     show_acc(net_main, data_train, data_test, args)
     show_acc(net_main, data_train, data_test, args)
-
-
-    # # federated learning
-    # for iter in range(args.epochs):
-    #     w_locals, loss_locals = [], []
-
-    #     # init leaders
-    #     for leader in leaders: w_leaders[leader] = []
-
-    #     m = max(int(args.frac * args.num_users), 1)
-    #     idxs_users = np.random.choice(range(args.num_users), m, replace=False)
-    #     for idx in idxs_users:
-    #         local = LocalUpdate(args=args, dataset=data_train, idxs=dict_users[idx])
-    #         w, loss = local.train(net=copy.deepcopy(net_main).to(args.device))
-
-    #         # MPC send w to leaders
-    #         w_divides = divide_dict(w)
-
-    #         for i in range(len(leaders)):
-    #             w_leaders[leaders[i]].append(copy.deepcopy(w_divides[i]))
-
-    #         # w_locals.append(copy.deepcopy(w))
-    #         loss_locals.append(copy.deepcopy(loss))
-
-    #     # # original global weights
-    #     # w_glob = FedAvg(w_locals)
-
-    #     # secure aggregation
-    #     w_glob = copy.deepcopy(w_zero)
-    #     for leader in leaders:
-    #         _w = FedAvg(w_leaders[leader])
-    #         w_glob = FedAdd(w_glob, _w)
-
-    #     # copy weight to net_main
-    #     net_main.load_state_dict(w_glob)
-
-    #     # print loss
-    #     loss_avg = sum(loss_locals) / len(loss_locals)
-    #     print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
-
-    #     # if iter in [9, 29, 49, 74, 99]:
-    #     #     show_acc(net_main, data_train, data_test, args)
-    # show_acc(net_main, data_train, data_test, args)

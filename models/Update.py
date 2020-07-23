@@ -72,9 +72,10 @@ class FL_client(object):
             batch_loss = []
             for _, (images, labels) in enumerate(self.data):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
-                self.net.zero_grad()
+                # self.net.zero_grad()
                 pred = self.net(images)
                 loss = self.loss_func(pred, labels)
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
                 batch_loss.append(loss.item())
