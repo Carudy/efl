@@ -16,20 +16,18 @@ class DatasetSplit(Dataset):
         image, label = self.dataset[self.idxs[item]]
         return image, label
 
-class FL_client(object):
+
+class FL_client():
     def __init__(self, args):
         if args.dataset == 'cifar':
             self.net = CNNCifar(args=args).to(args.device)
         else:
             self.net = CNNMnist(args=args).to(args.device)
         self.net.train()
-        self.loss_func = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=args.lr)
-        self.args      = args
-        self.is_leader = False
-        self.w_glob    = []
-        self.x = self.gx = 0
-        self.keys      = defaultdict(int)
+        self.loss_func =  nn.CrossEntropyLoss()
+        self.optimizer =  torch.optim.SGD(self.net.parameters(), lr = args.lr)
+        self.args      =  args
+        self.w_glob    =  []
         
     def set_data(self, dataset, idxs):
         self.data = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
@@ -43,7 +41,6 @@ class FL_client(object):
             batch_loss = []
             for _, (images, labels) in enumerate(self.data):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
-                # self.net.zero_grad()
                 pred = self.net(images)
                 loss = self.loss_func(pred, labels)
                 self.optimizer.zero_grad()
@@ -52,34 +49,3 @@ class FL_client(object):
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
         return self.net.state_dict(), sum(epoch_loss) / len(epoch_loss)
-
-
-# class LocalUpdate(object):
-#     def __init__(self, args, dataset=None, idxs=None):
-#         self.args = args
-#         self.loss_func = nn.CrossEntropyLoss()
-#         self.selected_clients = []
-#         self.ldr_train = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
-
-#     def train(self, net):
-#         net.train()
-#         # train and update
-#         optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=0.9)
-
-#         epoch_loss = []
-#         for iter in range(self.args.local_ep):
-#             batch_loss = []
-#             for batch_idx, (images, labels) in enumerate(self.ldr_train):
-#                 images, labels = images.to(self.args.device), labels.to(self.args.device)
-#                 net.zero_grad()
-#                 log_probs = net(images)
-#                 loss = self.loss_func(log_probs, labels)
-#                 loss.backward()
-#                 optimizer.step()
-#                 if self.args.verbose and batch_idx % 10 == 0:
-#                     print('Update Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-#                         iter, batch_idx * len(images), len(self.ldr_train.dataset),
-#                                100. * batch_idx / len(self.ldr_train), loss.item()))
-#                 batch_loss.append(loss.item())
-#             epoch_loss.append(sum(batch_loss)/len(batch_loss))
-#         return net.state_dict(), sum(epoch_loss) / len(epoch_loss)

@@ -1,9 +1,9 @@
 # Federated Learning
-Modification of [shaoxiongji](https://github.com/shaoxiongji/federated-learning)
+Learning part inspired from [shaoxiongji](https://github.com/shaoxiongji/federated-learning)
 
 ## Requirements
-python>=3.6  
-pytorch>=0.4
+python >= 3.6  
+pytorch >= 0.4
 
 ## Run
 Example:
