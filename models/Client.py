@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from models.Nets import CNNMnist, CNNCifar
-from collections import defaultdict
+from collections import defaultdict 
 
 class DatasetSplit(Dataset):
     def __init__(self, dataset, idxs):
@@ -28,6 +28,9 @@ class FL_client():
         self.optimizer =  torch.optim.SGD(self.net.parameters(), lr = args.lr)
         self.args      =  args
         self.w_glob    =  []
+        # key exchange
+        self.x = self.gx = 0    
+        self.keys = defaultdict(int)
         
     def set_data(self, dataset, idxs):
         self.data = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)

@@ -1,1 +1,1 @@
-python main.py --dataset mnist --iid --num_channels 1 --gpu 0 --epochs 10
+python main.py --dataset cifar --gpu 0 --epochs 10 --num_users 100
