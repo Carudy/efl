@@ -52,8 +52,12 @@ def DH(cid, client, lid, leader, shared_p, shared_g):
 
 #********************************************************************************
 if __name__ == '__main__':
+    _DH     =   False
+    _Crash  =   False
+    _Drop   =   False
+
     args = args_parser()
-    print(args.gpu, torch.cuda.is_available())
+    print('GPU: ', args.gpu, torch.cuda.is_available())
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
     data_train, data_test, dict_users = load_data(args.dataset, args.iid, args.num_users)
@@ -81,15 +85,16 @@ if __name__ == '__main__':
     # leaders = np.random.choice(range(n_clients), 3, replace=False)
 
     # DH set-up
-    shared_p, shared_g, cnt_comm = 10000079, 13, 0
-    # dh_s = time.time()
-    for lid, leader in [(i, clients[i]) for i in leaders]:
-        for cid, client in enumerate(clients):
-            if lid != cid:
-                DH(cid, client, lid, leader, shared_p, shared_g)
-                cnt_comm += 2           # send g^x and g^y
-    # dh_e = time.time()
-    # print('Set-up communication count: {},\tCost {:.3f} ms.'.format(cnt_comm, (dh_e - dh_s)*1000))
+    if _DH:
+        shared_p, shared_g, cnt_comm = 10000079, 13, 0
+        # dh_s = time.time()
+        for lid, leader in [(i, clients[i]) for i in leaders]:
+            for cid, client in enumerate(clients):
+                if lid != cid:
+                    DH(cid, client, lid, leader, shared_p, shared_g)
+                    cnt_comm += 2           # send g^x and g^y
+        # dh_e = time.time()
+        # print('Set-up communication count: {},\tCost {:.3f} ms.'.format(cnt_comm, (dh_e - dh_s)*1000))
 
     # federated learning
     print("Start Learning:")
@@ -97,41 +102,45 @@ if __name__ == '__main__':
 
     plot_x      =   []
     plot_y      =   []
-    for crash_rate in [0.001, 0.002, 0.005, 0.01]:
-        cnt_comm    =   0
-        for epoch in range(args.epochs):
-            loss_locals = []
-            for i in leaders: clients[i].w_glob = []
-            for i in np.random.choice(range(args.num_users), m, replace=False):
-                clients[i].load_state(net_main.state_dict())
-                w, loss = clients[i].train()
-                w_divides = divide_dict(w)
-                for i in range(len(leaders)):
-                    clients[leaders[i]].w_glob.append(copy.deepcopy(w_divides[i]))
-                    while np.random.random() < crash_rate:
-                        cnt_comm += args.num_users*2
-                    cnt_comm += 1
+    # for crash_rate in [0.001, 0.002, 0.005, 0.01]:
+    cnt_comm    =   0
+    drop_rate = 0.1
+    for epoch in range(args.epochs):
+        loss_locals = []
+        for i in leaders: clients[i].w_glob = []
+        for i in np.random.choice(range(args.num_users), m, replace=False):
+            # network delay / dropout
+            if np.random.random() < drop_rate:
+                continue
+            clients[i].load_state(net_main.state_dict())
+            w, loss = clients[i].train()
+            w_divides = divide_dict(w)
+            for i in range(len(leaders)):
+                clients[leaders[i]].w_glob.append(copy.deepcopy(w_divides[i]))
+                # while np.random.random() < crash_rate:
+                #     cnt_comm += args.num_users*2
+                # cnt_comm += 1
 
-                loss_locals.append(loss)
+            loss_locals.append(loss)
 
-            # secure aggregation
-            w_glob = copy.deepcopy(w_zero)
-            for leader in leaders:
-                cnt_comm += 1
-                _w = FedAvg(clients[leader].w_glob)
-                w_glob = FedAdd(w_glob, _w)
+        # secure aggregation
+        w_glob = copy.deepcopy(w_zero)
+        for leader in leaders:
+            cnt_comm += 1
+            _w = FedAvg(clients[leader].w_glob)
+            w_glob = FedAdd(w_glob, _w)
 
-            # copy weight to net_main
-            net_main.load_state_dict(w_glob)
+        # copy weight to net_main
+        net_main.load_state_dict(w_glob)
 
-            # print loss
-            loss_avg = sum(loss_locals) / len(loss_locals)
-            print('Round {:3d}, Average loss {:.3f}'.format(epoch, loss_avg))
+        # print loss
+        loss_avg = sum(loss_locals) / len(loss_locals)
+        print('Round {:3d}, Average loss {:.3f}'.format(epoch, loss_avg))
 
-            # if epoch in [4, 9, 19, 29, 39, 49]:
-            #     plot_x.append(epoch+1)
-            #     # plot_y.append(show_acc(net_main, data_train, data_test, args))
-            #     plot_y.append(cnt_comm)
-        # show_acc(net_main, data_train, data_test, args)
-        
-        print(crash_rate, cnt_comm)
+        if epoch in [4, 9, 19, 29, 39, 49, 59, 69, 79, 89, 99]:
+            # show_acc(net_main, data_train, data_test, args)
+            plot_x.append(epoch+1)
+            plot_y.append(show_acc(net_main, data_train, data_test, args))
+    # show_acc(net_main, data_train, data_test, args)
+    plot_y = [round(i, 3) for i in plot_y]
+    print(plot_x, plot_y)
