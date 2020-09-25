@@ -2,8 +2,11 @@ import numpy as np
 from torchvision import datasets, transforms
 import torch, copy, time, threading, random
 import urllib.request
-from Crypto.Cipher import AES
 from Crypto.Hash import HMAC, SHA256
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+import pickle
 
 from utils.sampling import load_data
 from utils.options import args_parser
@@ -60,6 +63,10 @@ def t_out_of_n(client):
     for i in range(1, args.num_users): cal_poly(i, client.x)
     for i in range(1, args.num_users): cal_poly(i, client.bu)
 
+def sim_decode():
+    ci = AES.new(b'demoflAEoverhead', AES.MODE_CFB, b'0000000000000000')
+    pt = ci.decrypt(pad(open('cipher', 'rb').read(), AES.block_size))
+    return pickle.loads(pt)
 
 #********************************************************************************
 class Client_thread(threading.Thread):
@@ -71,45 +78,87 @@ class Client_thread(threading.Thread):
     def send(self):
         urllib.request.urlopen(self.req)
 
+    # AES encryption
+    def encode(self, x, data):
+        if type(self.net.keys[x]) != type('a'.encode()):
+            self.net.keys[x] = b'demoflAEoverhead'
+        ci = AES.new(self.net.keys[x], AES.MODE_CFB, b'0000000000000000')
+        ci = AES.new(self.net.keys[x], AES.MODE_CFB, b'0000000000000000')
+        ct = ci.encrypt(pad(pickle.dumps(data), AES.block_size))
+        return ct
+
+    def decode(self, x, data):
+        if type(self.net.keys[x]) != type('a'.encode()):
+            self.net.keys[x] = b'demoflAEoverhead'
+        ci = AES.new(self.net.keys[x], AES.MODE_CFB, b'0000000000000000')
+        ci = AES.new(self.net.keys[x], AES.MODE_CFB, b'0000000000000000')
+        pt = ci.decrypt(pad(data, AES.block_size))
+        return pickle.loads(pt)
+
     def run(self):
-        global clients, leaders, w_locals
+        global clients, leaders, w_locals, args
         self.w, self.loss = self.net.train()
 
+        self.ts = time.time()
         if _Mode == 0:
             w_divides = divide_dict(self.w)
             for i in range(len(leaders)):
+                # we did the encryption for overhead observation, while what we send is plaintext
+                c_piece = self.encode(leaders[i], w_divides[i])
                 clients[leaders[i]].w_glob.append(copy.deepcopy(w_divides[i]))
 
         elif _Mode == 1:
-            w_locals.append(copy.deepcopy(self.w))
-        
+            # compute s_uv generate p_uv
+            for i in train_users: 
+                random.seed(random.randint(0, 1000))
+                for _ in w_zero: random.random()
 
+            # compute p_u
+            for _ in w_zero: random.random()
+
+            # compute y_u
+            for i in train_users: 
+                FedAdd(self.w, self.w)
+
+            # encrypt and send y_u
+            self.encode(0, self.w)
+
+            # unmasking
+            for _ in w_zero: sim_decode()
+
+            w_locals.append(copy.deepcopy(self.w))
+
+        self.overhead = (time.time() - self.ts) * 1000
+        
 #********************************************************************************
 if __name__ == '__main__':
     args = args_parser()
-    global clients, leaders, w_locals, url, poly
-    _Mode      =    0        # 0: 'demo'  1: 'bona'
+    global clients, leaders, w_locals, url, poly, train_users, w_zero
+    _Mode      =    1        # 0: 'demo'  1: 'bona'
     _DH        =    True
     _Crash     =    False
     _Drop      =    False
-    n_leader   =    int(args.num_users * 0.1)
+    n_leader   =    int(args.num_users * 0.03)
     w_locals   =    []
-    shared_p, shared_g, cnt_comm = 6362166871434581, 13, 0    # For DH protocol
-    url        =    'http://10.28.156.99:6789'        # simulate sending message
-    poly       =    [random.randint(3, shared_p) for _ in range(args.num_users-1)]  # t-out-of-n poly
+    # For DH protocol
+    shared_p, shared_g, cnt_comm = 6362166871434581, 13, 0    
+    # simulate sending message
+    url        =    'http://10.28.156.99:6789'        
+    # t-out-of-n poly
+    poly       =    [random.randint(3, shared_p) for _ in range(args.num_users-1)]  
 
     print('DemoFL' if _Mode==0 else 'FedAvg')
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
     ##### init global model
     if args.dataset == 'cifar':
-        net_global = CNNCifar(args=args).to(args.device)
         args.num_channels = 3
         args.iid = True
+        net_global = CNNCifar(args=args).to(args.device)
     else:
-        net_global = CNNMnist(args=args).to(args.device)
         args.num_channels = 1
         args.iid = False
+        net_global = CNNMnist(args=args).to(args.device)
 
     net_global.train()
     data_train, data_test, dict_users = load_data(args.dataset, args.iid, args.num_users)
@@ -162,16 +211,21 @@ if __name__ == '__main__':
         dh_e = time.time()
         print('Set-up Comm Avg Cost {:.3f} ms.'.format((dh_e - dh_s) * 1000 / args.num_users))
 
-    exit()
+    # exit()
     ##### federated learning
     print("Start Learning:")
     m = max(int(args.frac * args.num_users), 1)     # number of common-user
 
-    plot_x      =   []
-    plot_y      =   []
+    plot_x          =   []
+    plot_y          =   []
+    plot_z          =   []
+    avg_user_time   =   0
+    avg_leader_time =   0
     # cnt_comm    =   0
     # drop_rate = 0.1
 
+    ################################################################
+    #####***********************************************************
     ##### loop for epoch_max
     for epoch in range(args.epochs):
         w_locals    = []
@@ -189,14 +243,19 @@ if __name__ == '__main__':
             workers[-1].start()
             
         for td in workers: td.join()
-        for td in workers: loss_locals.append(td.loss)
+        for td in workers: 
+            loss_locals.append(td.loss)
+            avg_user_time += td.overhead
 
         # secure aggregation
         if  _Mode==0:
+            ts = time.time()
             w_glob = copy.deepcopy(w_zero)
             for leader in leaders:
+                for _ in range(len(clients[leader].w_glob)): sim_decode()
                 _w = FedAvg(clients[leader].w_glob)
                 w_glob = FedAdd(w_glob, _w)
+            avg_leader_time += (time.time() - ts) * 1000
 
         elif _Mode==1:
             w_glob = FedAvg(w_locals)
@@ -213,7 +272,8 @@ if __name__ == '__main__':
         if epoch in [4, 9, 19, 29, 39, 49, 59, 69, 79, 89, 99]:
             # show_acc(net_global, data_train, data_test, args)
             plot_x.append(epoch+1)
-            plot_y.append(show_acc(net_global, data_train, data_test, args))
+            plot_y.append(avg_user_time / len(workers))
+            # plot_z.append(avg_leader_time / n_leader)
 
     # show_acc(net_global, data_train, data_test, args)
     print(plot_y)
