@@ -1,1 +1,1 @@
-python main.py --dataset mnist --gpu 0 --epochs 100 --num_users 100
+python main.py --dataset cifar --gpu 0 --epochs 200

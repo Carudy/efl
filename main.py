@@ -74,6 +74,7 @@ class Client_thread(threading.Thread):
         super(Client_thread, self).__init__()
         self.net  =  net
         self.req  =  urllib.request.Request(url)
+        self.ok   =  True
 
     def send(self):
         urllib.request.urlopen(self.req)
@@ -96,7 +97,13 @@ class Client_thread(threading.Thread):
         return pickle.loads(pt)
 
     def run(self):
-        global clients, leaders, w_locals, args
+        # dropout
+        if _DH:
+            rd = random.random()
+            if rd <= drop_rate: 
+                self.ok = False
+                return
+
         self.w, self.loss = self.net.train()
 
         self.ts = time.time()
@@ -133,12 +140,11 @@ class Client_thread(threading.Thread):
 #********************************************************************************
 if __name__ == '__main__':
     args = args_parser()
-    global clients, leaders, w_locals, url, poly, train_users, w_zero
-    _Mode      =    1        # 0: 'demo'  1: 'bona'
+    global clients, leaders, w_locals, url, poly, train_users, w_zero, _DH, drop_rate
+    _Mode      =    0        # 0: 'demo'  1: 'bona'
     _DH        =    True
-    _Crash     =    False
-    _Drop      =    False
-    n_leader   =    int(args.num_users * 0.03)
+    _Drop      =    True
+    n_leader   =    3
     w_locals   =    []
     # For DH protocol
     shared_p, shared_g, cnt_comm = 6362166871434581, 13, 0    
@@ -222,8 +228,7 @@ if __name__ == '__main__':
     avg_user_time   =   0
     avg_leader_time =   0
     # cnt_comm    =   0
-    # drop_rate = 0.1
-
+    drop_rate = 0.2
     ################################################################
     #####***********************************************************
     ##### loop for epoch_max
@@ -243,9 +248,10 @@ if __name__ == '__main__':
             workers[-1].start()
             
         for td in workers: td.join()
-        for td in workers: 
-            loss_locals.append(td.loss)
-            avg_user_time += td.overhead
+        for td in workers:
+            if td.ok:
+                loss_locals.append(td.loss)
+                avg_user_time += td.overhead
 
         # secure aggregation
         if  _Mode==0:
@@ -269,11 +275,9 @@ if __name__ == '__main__':
 
 
         ### Plot data
-        if epoch in [4, 9, 19, 29, 39, 49, 59, 69, 79, 89, 99]:
-            # show_acc(net_global, data_train, data_test, args)
+        if epoch in [49, 69, 89, 99, 119, 129, 149, 159, 169, 179, 189, 199]:
             plot_x.append(epoch+1)
-            plot_y.append(avg_user_time / len(workers))
-            # plot_z.append(avg_leader_time / n_leader)
+            plot_y.append(show_acc(net_global, data_train, data_test, args))
 
     # show_acc(net_global, data_train, data_test, args)
-    print(plot_y)
+    print(drop_rate, plot_y)
