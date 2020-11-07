@@ -141,7 +141,7 @@ class Client_thread(threading.Thread):
 if __name__ == '__main__':
     args = args_parser()
     global clients, leaders, w_locals, url, poly, train_users, w_zero, _DH, drop_rate
-    _Mode      =    0        # 0: 'demo'  1: 'bona'
+    _Mode      =    1        # 0: 'demo'  1: 'bona'
     _DH        =    True
     _Drop      =    True
     n_leader   =    3
@@ -217,7 +217,7 @@ if __name__ == '__main__':
         dh_e = time.time()
         print('Set-up Comm Avg Cost {:.3f} ms.'.format((dh_e - dh_s) * 1000 / args.num_users))
 
-    # exit()
+    exit()
     ##### federated learning
     print("Start Learning:")
     m = max(int(args.frac * args.num_users), 1)     # number of common-user

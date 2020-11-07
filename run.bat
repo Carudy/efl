@@ -1,1 +1,1 @@
-python main.py --dataset cifar --gpu 0 --epochs 200
+python main.py --dataset cifar --gpu 0 --epochs 200 --num_users 900
